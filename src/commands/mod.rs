@@ -1,6 +1,6 @@
-pub mod echo;
-pub mod exit;
+pub mod builtins;
 
+use crate::commands::builtins::{echo, exit, typec};
 use std::collections::HashMap;
 
 /// Result type for command execution
@@ -19,8 +19,8 @@ pub enum CommandOutput {
 
 /// Trait that all commands must implement
 pub trait Command {
-    /// Execute the command with given arguments
-    fn execute(&self, args: &[String]) -> CommandResult;
+    /// Execute the command with given arguments and optional registry access
+    fn execute(&self, args: &[String], registry: &CommandRegistry) -> CommandResult;
 
     /// Get command name
     fn name(&self) -> &str;
@@ -46,6 +46,7 @@ impl CommandRegistry {
         // Register all commands here
         registry.register(Box::new(exit::ExitCommand));
         registry.register(Box::new(echo::EchoCommand));
+        registry.register(Box::new(typec::TypeCommand));
 
         registry
     }
@@ -58,7 +59,7 @@ impl CommandRegistry {
     /// Execute a command by name with arguments
     pub fn execute(&self, command_name: &str, args: &[String]) -> CommandResult {
         match self.commands.get(command_name) {
-            Some(command) => command.execute(args),
+            Some(command) => command.execute(args, self),
             None => Err(format!("{}: command not found", command_name)),
         }
     }

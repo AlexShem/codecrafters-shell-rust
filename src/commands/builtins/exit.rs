@@ -1,10 +1,10 @@
-use super::{Command, CommandOutput, CommandResult};
+use crate::commands::{Command, CommandOutput, CommandRegistry, CommandResult};
 
 /// Exit command - exits the shell
 pub struct ExitCommand;
 
 impl Command for ExitCommand {
-    fn execute(&self, args: &[String]) -> CommandResult {
+    fn execute(&self, args: &[String], _registry: &CommandRegistry) -> CommandResult {
         let exit_code = if args.is_empty() {
             0
         } else {
