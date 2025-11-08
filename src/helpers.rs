@@ -34,6 +34,36 @@ impl ShellHelper {
 
         self.path_executable_loaded = true;
     }
+
+    fn longest_common_prefix(strings: &[String]) -> String {
+        if strings.is_empty() {
+            return String::new();
+        }
+
+        if strings.len() == 1 {
+            return strings[0].clone();
+        }
+
+        let first = &strings[0];
+        let mut prefix_len = first.len();
+
+        for s in &strings[1..] {
+            prefix_len = prefix_len.min(s.len());
+
+            for i in 0..prefix_len {
+                if first.chars().nth(i) != s.chars().nth(i) {
+                    prefix_len = i;
+                    break;
+                }
+            }
+
+            if prefix_len == 0 {
+                break;
+            }
+        }
+
+        first.chars().take(prefix_len).collect()
+    }
 }
 
 impl Helper for ShellHelper {}
@@ -55,6 +85,20 @@ impl Completer for ShellHelper {
 
         // Handle multiple completions
         if completions.len() > 1 {
+            let common_prefix = Self::longest_common_prefix(&completions);
+
+            if common_prefix.len() > word.len() {
+                self.last_completion_context.borrow_mut().take();
+
+                return Ok((
+                    line.len() - word.len(),
+                    vec![Pair {
+                        display: common_prefix.clone(),
+                        replacement: common_prefix,
+                    }],
+                ));
+            }
+
             let mut last_context = self.last_completion_context.borrow_mut();
 
             // Check if this is a repeated TAB press for the same prefix
