@@ -78,6 +78,10 @@ impl CommandRegistry {
     pub fn command_names(&self) -> Vec<&str> {
         self.commands.keys().map(|s| s.as_str()).collect()
     }
+    
+    pub fn list_commands(&self) -> Vec<&str> {
+        self.commands.keys().map(|s| s.as_str()).collect()
+    }
 }
 
 /// Parse a command line into command name and arguments

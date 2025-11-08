@@ -1,45 +1,51 @@
 mod commands;
+mod helpers;
+mod trie;
 
+use crate::helpers::ShellHelper;
 use commands::{parse_command_line, CommandOutput, CommandRegistry};
-use std::io::{self, Write};
+use rustyline::error::ReadlineError;
+use rustyline::history::DefaultHistory;
+use std::io::{self};
 use std::process::Command as ProcessCommand;
 
 fn main() {
     // Create command registry with all available commands
     let registry = CommandRegistry::new();
 
+    let mut helper = ShellHelper::new();
+    for command_name in registry.list_commands() {
+        helper.trie.insert(command_name);
+    }
+
+    let mut rl = rustyline::Editor::<ShellHelper, DefaultHistory>::new().unwrap();
+    rl.set_helper(Some(helper));
+
     loop {
-        print!("$ ");
-        io::stdout().flush().unwrap();
-
-        let mut input = String::new();
-        io::stdin().read_line(&mut input).unwrap();
-
-        // Parse command line
-        let parsed = parse_command_line(&input);
-
-        if let Some((command_name, args)) = parsed {
-            // Execute command through registry
-            match registry.execute(&command_name, &args) {
-                Ok(output) => match output {
-                    CommandOutput::Exit(code) => {
-                        std::process::exit(code);
-                    }
-                    CommandOutput::Success => {
-                        // Command succeeded, continue
-                    }
-                    CommandOutput::Message(msg) => {
-                        println!("{}", msg);
-                    }
-                },
-                Err(_) => {
-                    if let Err(e) = execute_external_program(&command_name, &args) {
-                        eprintln!("{}", e);
+        match rl.readline("$ ") {
+            Ok(input) => {
+                if let Some((command_name, args)) = parse_command_line(&input) {
+                    match registry.execute(&command_name, &args) {
+                        Ok(output) => match output {
+                            CommandOutput::Success => {}
+                            CommandOutput::Message(msg) => println!("{}", msg),
+                            CommandOutput::Exit(code) => std::process::exit(code),
+                        },
+                        Err(_) => {
+                            if let Err(e) = execute_external_program(&command_name, &args) {
+                                eprintln!("{}", e);
+                            }
+                        }
                     }
                 }
             }
+            Err(ReadlineError::Interrupted) => continue,
+            Err(ReadlineError::Eof) => break,
+            Err(err) => {
+                eprintln!("Error: {:?}", err);
+                break;
+            }
         }
-        // Empty input - just show prompt again
     }
 }
 
