@@ -1,3 +1,4 @@
+use crate::path_utils::scan_path_executables;
 use crate::trie::Trie;
 use rustyline::completion::{Completer, Pair};
 use rustyline::highlight::Highlighter;
@@ -7,11 +8,28 @@ use rustyline::{Context, Helper};
 
 pub struct ShellHelper {
     pub trie: Trie,
+    path_executable_loaded: bool,
 }
 
 impl ShellHelper {
     pub fn new() -> Self {
-        Self { trie: Trie::new() }
+        Self {
+            trie: Trie::new(),
+            path_executable_loaded: false,
+        }
+    }
+
+    pub(crate) fn load_path_executables(&mut self) {
+        if self.path_executable_loaded {
+            return;
+        }
+
+        let executables = scan_path_executables();
+        for exe in executables {
+            self.trie.insert(&exe);
+        }
+
+        self.path_executable_loaded = true;
     }
 }
 

@@ -1,5 +1,6 @@
 mod commands;
 mod helpers;
+mod path_utils;
 mod trie;
 
 use crate::helpers::ShellHelper;
@@ -14,9 +15,14 @@ fn main() {
     let registry = CommandRegistry::new();
 
     let mut helper = ShellHelper::new();
+
+    // Load builtin commands
     for command_name in registry.list_commands() {
         helper.trie.insert(command_name);
     }
+
+    // Load PATH executables
+    helper.load_path_executables();
 
     let mut rl = rustyline::Editor::<ShellHelper, DefaultHistory>::new().unwrap();
     rl.set_helper(Some(helper));
