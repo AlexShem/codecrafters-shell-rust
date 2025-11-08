@@ -5,10 +5,12 @@ use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
 use rustyline::validate::Validator;
 use rustyline::{Context, Helper};
+use std::cell::RefCell;
 
 pub struct ShellHelper {
     pub trie: Trie,
     path_executable_loaded: bool,
+    last_completion_context: RefCell<Option<(String, Vec<String>)>>,
 }
 
 impl ShellHelper {
@@ -16,6 +18,7 @@ impl ShellHelper {
         Self {
             trie: Trie::new(),
             path_executable_loaded: false,
+            last_completion_context: RefCell::new(None),
         }
     }
 
@@ -45,12 +48,47 @@ impl Completer for ShellHelper {
         _ctx: &Context<'_>,
     ) -> rustyline::Result<(usize, Vec<Self::Candidate>)> {
         let line = &line[..pos];
-
         let word = line.split_whitespace().last().unwrap_or("");
 
-        let completions = self.trie.find_completions(word);
+        let mut completions = self.trie.find_completions(word);
+        completions.sort();
 
-        let candidate = completions
+        // Handle multiple completions
+        if completions.len() > 1 {
+            let mut last_context = self.last_completion_context.borrow_mut();
+
+            // Check if this is a repeated TAB press for the same prefix
+            let is_repeated = last_context
+                .as_ref()
+                .map(|(prev_word, _)| prev_word == word)
+                .unwrap_or(false);
+
+            return if is_repeated {
+                // Second TAB press - show all completions
+                println!();
+                println!("{}  ", completions.join("  "));
+                print!("$ {}", line);
+                std::io::Write::flush(&mut std::io::stdout()).ok();
+
+                *last_context = None;
+
+                // Return empty to prevent rustyline from doing anything
+                Ok((0, vec![]))
+            } else {
+                // First TAB press - ring bell and store context
+                print!("\x07");
+                std::io::Write::flush(&mut std::io::stdout()).ok();
+
+                *last_context = Some((word.to_string(), completions.clone()));
+
+                Ok((0, vec![]))
+            };
+        }
+
+        // Single completion or no completions - proceed normally
+        self.last_completion_context.borrow_mut().take();
+
+        let candidates = completions
             .into_iter()
             .map(|completion| {
                 let replacement = format!("{} ", completion);
@@ -61,7 +99,7 @@ impl Completer for ShellHelper {
             })
             .collect();
 
-        Ok((line.len() - word.len(), candidate))
+        Ok((line.len() - word.len(), candidates))
     }
 }
 
