@@ -1,6 +1,6 @@
 use crate::commands::{Command, CommandOutput, CommandRegistry, CommandResult};
 use std::env;
-use std::path::Path;
+use std::path::PathBuf;
 
 pub struct CdCommand;
 
@@ -10,8 +10,17 @@ impl Command for CdCommand {
             return Err("cd: missing argument".to_string());
         }
 
-        // Deal with absolute paths for now
-        let path = Path::new(&args[0]);
+        let path = if &args[0] == "~" {
+            if let Some(home) = env::home_dir() {
+                home
+            } else {
+                return Ok(CommandOutput::Message(
+                    "Home directory is not set".to_string(),
+                ));
+            }
+        } else {
+            PathBuf::from(&args[0])
+        };
 
         if !path.exists() {
             return Ok(CommandOutput::Message(format!(
@@ -20,7 +29,7 @@ impl Command for CdCommand {
             )));
         }
 
-        match env::set_current_dir(path) {
+        match env::set_current_dir(&path) {
             Ok(_) => Ok(CommandOutput::Success),
             Err(e) => Ok(CommandOutput::Message(format!(
                 "Failed to change working directory: {}. Reason: {}",
