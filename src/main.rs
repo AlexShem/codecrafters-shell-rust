@@ -2,6 +2,7 @@ mod commands;
 
 use commands::{parse_command_line, CommandOutput, CommandRegistry};
 use std::io::{self, Write};
+use std::process::Command as ProcessCommand;
 
 fn main() {
     // Create command registry with all available commands
@@ -31,11 +32,37 @@ fn main() {
                         println!("{}", msg);
                     }
                 },
-                Err(error) => {
-                    println!("{}", error);
+                Err(_) => {
+                    if let Err(e) = execute_external_program(&command_name, &args) {
+                        eprintln!("{}", e);
+                    }
                 }
             }
         }
         // Empty input - just show prompt again
+    }
+}
+
+fn execute_external_program(program: &str, args: &[String]) -> Result<(), String> {
+    let status = ProcessCommand::new(program)
+        .args(args)
+        // .stdin(Stdio::inherit())
+        // .stdout(Stdio::inherit())
+        // .stderr(Stdio::inherit())
+        .status();
+    match status {
+        Ok(exit_status) => {
+            if !exit_status.success() {
+                //
+            }
+            Ok(())
+        }
+        Err(e) => {
+            if e.kind() == io::ErrorKind::NotFound {
+                Err(format!("{}: command not found", program))
+            } else {
+                Err(format!("{}: {}", program, e))
+            }
+        }
     }
 }
