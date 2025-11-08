@@ -1,6 +1,6 @@
 pub mod builtins;
 
-use crate::commands::builtins::{echo, exit, pwd, typec};
+use crate::commands::builtins::{cd, echo, exit, pwd, typec};
 use std::collections::HashMap;
 
 /// Result type for command execution
@@ -22,9 +22,11 @@ pub trait Command {
     /// Execute the command with given arguments and optional registry access
     fn execute(&self, args: &[String], registry: &CommandRegistry) -> CommandResult;
 
+    #[allow(unused)]
     /// Get command name
     fn name(&self) -> &str;
 
+    #[allow(unused)]
     /// Get command description (for help)
     fn description(&self) -> &str {
         ""
@@ -48,6 +50,7 @@ impl CommandRegistry {
         registry.register(Box::new(echo::EchoCommand));
         registry.register(Box::new(typec::TypeCommand));
         registry.register(Box::new(pwd::PwdCommand));
+        registry.register(Box::new(cd::CdCommand));
 
         registry
     }
@@ -70,6 +73,7 @@ impl CommandRegistry {
         self.commands.contains_key(command_name)
     }
 
+    #[allow(unused)]
     /// Get all registered command names
     pub fn command_names(&self) -> Vec<&str> {
         self.commands.keys().map(|s| s.as_str()).collect()
