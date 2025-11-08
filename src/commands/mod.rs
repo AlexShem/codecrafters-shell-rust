@@ -1,6 +1,6 @@
 pub mod builtins;
 
-use crate::commands::builtins::{cd, echo, exit, pwd, typec};
+use crate::commands::builtins::{cd, echo, exit, history, pwd, typec};
 use std::collections::HashMap;
 
 /// Result type for command execution
@@ -51,6 +51,7 @@ impl CommandRegistry {
         registry.register(Box::new(typec::TypeCommand));
         registry.register(Box::new(pwd::PwdCommand));
         registry.register(Box::new(cd::CdCommand));
+        registry.register(Box::new(history::HistoryCommand));
 
         registry
     }
@@ -78,7 +79,7 @@ impl CommandRegistry {
     pub fn command_names(&self) -> Vec<&str> {
         self.commands.keys().map(|s| s.as_str()).collect()
     }
-    
+
     pub fn list_commands(&self) -> Vec<&str> {
         self.commands.keys().map(|s| s.as_str()).collect()
     }
