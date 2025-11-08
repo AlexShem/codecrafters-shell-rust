@@ -1,6 +1,6 @@
 pub mod builtins;
 
-use crate::commands::builtins::{echo, exit, typec};
+use crate::commands::builtins::{echo, exit, pwd, typec};
 use std::collections::HashMap;
 
 /// Result type for command execution
@@ -47,6 +47,7 @@ impl CommandRegistry {
         registry.register(Box::new(exit::ExitCommand));
         registry.register(Box::new(echo::EchoCommand));
         registry.register(Box::new(typec::TypeCommand));
+        registry.register(Box::new(pwd::PwdCommand));
 
         registry
     }
