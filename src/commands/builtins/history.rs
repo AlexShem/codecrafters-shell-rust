@@ -1,5 +1,6 @@
 use crate::commands::{Command, CommandOutput, CommandRegistry, CommandResult};
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 
 pub struct HistoryCommand;
@@ -8,6 +9,7 @@ pub struct HistoryCommand;
 enum HistoryAction {
     Display { limit: Option<usize> },
     Read { path: String },
+    Write { path: String },
 }
 
 impl HistoryCommand {
@@ -22,6 +24,14 @@ impl HistoryCommand {
                     return Err("history: -r requires a file path argument".to_string());
                 }
                 Ok(HistoryAction::Read {
+                    path: args[1].clone(),
+                })
+            }
+            "-w" => {
+                if args.len() < 2 {
+                    return Err("history: -w requires a file path argument".to_string());
+                }
+                Ok(HistoryAction::Write {
                     path: args[1].clone(),
                 })
             }
@@ -52,6 +62,16 @@ impl HistoryCommand {
                     .collect()
             })
             .map_err(|e| format!("history: cannot read {}: {}", path, e))
+    }
+
+    fn write_history_file(path: &str, commands: &[String]) -> Result<(), String> {
+        let mut file = fs::File::create(path)
+            .map_err(|e| format!("history: cannot open {} for writing: {}", path, e))?;
+        for cmd in commands {
+            writeln!(file, "{}", cmd)
+                .map_err(|e| format!("history: cannot write to {}: {}", path, e))?;
+        }
+        Ok(())
     }
 
     fn format_history(history: &[(usize, &String)]) -> String {
@@ -99,6 +119,13 @@ impl Command for HistoryCommand {
 
                 // Return a special variant that signals file commands should be added
                 Ok(CommandOutput::HistoryRead(file_commands))
+            }
+            HistoryAction::Write { path } => {
+                let history = history.unwrap_or(&[]);
+
+                Self::write_history_file(&path, history)?;
+
+                Ok(CommandOutput::Success)
             }
         }
     }
@@ -151,8 +178,28 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_args_write() {
+        let result = HistoryCommand::parse_args(&["-w".to_string(), "/path/to/file".to_string()]);
+        assert!(result.is_ok());
+
+        let result = result.unwrap();
+        assert_eq!(
+            result,
+            HistoryAction::Write {
+                path: "/path/to/file".to_string()
+            }
+        )
+    }
+
+    #[test]
     fn test_parse_args_read_missing_path() {
         let result = HistoryCommand::parse_args(&["-r".to_string()]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_args_write_missing_path() {
+        let result = HistoryCommand::parse_args(&["-w".to_string()]);
         assert!(result.is_err());
     }
 
@@ -175,6 +222,24 @@ mod tests {
         let result = HistoryCommand::read_history_file(path).unwrap();
 
         assert_eq!(result, vec!["echo hello", "echo world", "ls -la"]);
+    }
+
+    #[test]
+    fn test_write_history_file() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_str().unwrap();
+
+        let commands = vec![
+            "cd /home".to_string(),
+            "ls -la".to_string(),
+            "echo Hello".to_string(),
+        ];
+
+        HistoryCommand::write_history_file(path, &commands).unwrap();
+
+        let content = fs::read_to_string(path).unwrap();
+        let expected = "cd /home\nls -la\necho Hello\n";
+        assert_eq!(content, expected);
     }
 
     #[test]
