@@ -6,7 +6,7 @@ mod trie;
 use crate::helpers::ShellHelper;
 use commands::{parse_command_line, CommandOutput, CommandRegistry};
 use rustyline::error::ReadlineError;
-use rustyline::history::DefaultHistory;
+use rustyline::Config;
 use std::io::{self};
 use std::process::Command as ProcessCommand;
 
@@ -24,14 +24,28 @@ fn main() {
     // Load PATH executables
     helper.load_path_executables();
 
-    let mut rl = rustyline::Editor::<ShellHelper, DefaultHistory>::new().unwrap();
+    let config = Config::builder().auto_add_history(true).build();
+    let history = rustyline::history::MemHistory::new();
+
+    let mut rl = rustyline::Editor::<ShellHelper, _>::with_history(config, history).unwrap();
     rl.set_helper(Some(helper));
 
     loop {
         match rl.readline("$ ") {
             Ok(input) => {
                 if let Some((command_name, args)) = parse_command_line(&input) {
-                    match registry.execute(&command_name, &args) {
+                    let result = if command_name == "history" {
+                        let history_items: Vec<String> = rl
+                            .history()
+                            .into_iter()
+                            .map(|entry| entry.to_string())
+                            .collect();
+                        registry.execute_with_history(&command_name, &args, Some(&history_items))
+                    } else {
+                        registry.execute(&command_name, &args)
+                    };
+
+                    match result {
                         Ok(output) => match output {
                             CommandOutput::Success => {}
                             CommandOutput::Message(msg) => println!("{}", msg),

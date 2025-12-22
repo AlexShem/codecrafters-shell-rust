@@ -20,7 +20,19 @@ pub enum CommandOutput {
 /// Trait that all commands must implement
 pub trait Command {
     /// Execute the command with given arguments and optional registry access
-    fn execute(&self, args: &[String], registry: &CommandRegistry) -> CommandResult;
+    fn execute(&self, args: &[String], registry: &CommandRegistry) -> CommandResult {
+        self.execute_with_history(args, registry, None)
+    }
+
+    /// Execute the command with given arguments, registry access, and command history
+    fn execute_with_history(
+        &self,
+        args: &[String],
+        registry: &CommandRegistry,
+        _history: Option<&[String]>,
+    ) -> CommandResult {
+        self.execute(args, registry)
+    }
 
     #[allow(unused)]
     /// Get command name
@@ -65,6 +77,19 @@ impl CommandRegistry {
     pub fn execute(&self, command_name: &str, args: &[String]) -> CommandResult {
         match self.commands.get(command_name) {
             Some(command) => command.execute(args, self),
+            None => Err(format!("{}: command not found", command_name)),
+        }
+    }
+
+    /// Execute a command by name with arguments and command history
+    pub fn execute_with_history(
+        &self,
+        command_name: &str,
+        args: &[String],
+        history: Option<&[String]>,
+    ) -> CommandResult {
+        match self.commands.get(command_name) {
+            Some(command) => command.execute_with_history(args, self, history),
             None => Err(format!("{}: command not found", command_name)),
         }
     }
