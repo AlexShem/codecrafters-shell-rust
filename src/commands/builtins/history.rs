@@ -10,6 +10,7 @@ enum HistoryAction {
     Display { limit: Option<usize> },
     Read { path: String },
     Write { path: String },
+    Append { path: String },
 }
 
 impl HistoryCommand {
@@ -32,6 +33,14 @@ impl HistoryCommand {
                     return Err("history: -w requires a file path argument".to_string());
                 }
                 Ok(HistoryAction::Write {
+                    path: args[1].clone(),
+                })
+            }
+            "-a" => {
+                if args.len() < 2 {
+                    return Err("history: -a requires a file path argument".to_string());
+                }
+                Ok(HistoryAction::Append {
                     path: args[1].clone(),
                 })
             }
@@ -67,6 +76,19 @@ impl HistoryCommand {
     fn write_history_file(path: &str, commands: &[String]) -> Result<(), String> {
         let mut file = fs::File::create(path)
             .map_err(|e| format!("history: cannot open {} for writing: {}", path, e))?;
+        for cmd in commands {
+            writeln!(file, "{}", cmd)
+                .map_err(|e| format!("history: cannot write to {}: {}", path, e))?;
+        }
+        Ok(())
+    }
+
+    pub fn append_history_file(path: &str, commands: &[String]) -> Result<(), String> {
+        let mut file = fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(path)
+            .map_err(|e| format!("history: cannot open {} for appending: {}", path, e))?;
         for cmd in commands {
             writeln!(file, "{}", cmd)
                 .map_err(|e| format!("history: cannot write to {}: {}", path, e))?;
@@ -127,6 +149,7 @@ impl Command for HistoryCommand {
 
                 Ok(CommandOutput::Success)
             }
+            HistoryAction::Append { path } => Ok(CommandOutput::HistoryAppend { path }),
         }
     }
 
@@ -309,5 +332,21 @@ mod tests {
         } else {
             panic!("Expected CommandOutput::Message");
         }
+    }
+
+    #[test]
+    fn test_append_history_file() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_str().unwrap();
+        let initial_commands = vec!["cd /home".to_string(), "ls -la".to_string()];
+
+        HistoryCommand::write_history_file(path, &initial_commands).unwrap();
+
+        let append_commands = vec!["echo Hello".to_string(), "pwd".to_string()];
+        HistoryCommand::append_history_file(path, &append_commands).unwrap();
+
+        let content = fs::read_to_string(path).unwrap();
+        let expected = "cd /home\nls -la\necho Hello\npwd\n";
+        assert_eq!(content, expected);
     }
 }

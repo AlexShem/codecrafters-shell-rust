@@ -17,6 +17,8 @@ pub enum CommandOutput {
     Exit(i32),
     /// History commands read from file (should be added to history)
     HistoryRead(Vec<String>),
+    /// Append history to file (path and start index for tracking)
+    HistoryAppend { path: String },
 }
 
 /// Trait that all commands must implement

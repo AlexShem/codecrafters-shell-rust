@@ -3,13 +3,15 @@ mod helpers;
 mod path_utils;
 mod trie;
 
+use crate::commands::builtins::history::HistoryCommand;
 use crate::helpers::ShellHelper;
 use commands::{parse_command_line, CommandOutput, CommandRegistry};
+use rustyline::config::Configurer;
 use rustyline::error::ReadlineError;
 use rustyline::Config;
+use std::collections::HashMap;
 use std::io::{self};
 use std::process::Command as ProcessCommand;
-use rustyline::config::Configurer;
 
 fn main() {
     // Create command registry with all available commands
@@ -25,14 +27,15 @@ fn main() {
     // Load PATH executables
     helper.load_path_executables();
 
-    let config = Config::builder()
-        .auto_add_history(true)
-        .build();
+    let config = Config::builder().auto_add_history(true).build();
     let history = rustyline::history::MemHistory::new();
 
     let mut rl = rustyline::Editor::<ShellHelper, _>::with_history(config, history).unwrap();
     rl.set_helper(Some(helper));
     rl.set_history_ignore_dups(false).unwrap();
+
+    // Track last appended index per file
+    let mut last_appended: HashMap<String, usize> = HashMap::new();
 
     loop {
         match rl.readline("$ ") {
@@ -50,17 +53,38 @@ fn main() {
                     };
 
                     match result {
-                        Ok(output) => match output {
-                            CommandOutput::Success => {}
-                            CommandOutput::Message(msg) => println!("{}", msg),
-                            CommandOutput::Exit(code) => std::process::exit(code),
-                            CommandOutput::HistoryRead(commands) => {
-                                // Add commands from file to history
-                                for cmd in commands {
-                                    rl.add_history_entry(&cmd).ok();
+                        Ok(output) => {
+                            match output {
+                                CommandOutput::Success => {}
+                                CommandOutput::Message(msg) => println!("{}", msg),
+                                CommandOutput::Exit(code) => std::process::exit(code),
+                                CommandOutput::HistoryRead(commands) => {
+                                    // Add commands from file to history
+                                    for cmd in commands {
+                                        rl.add_history_entry(&cmd).ok();
+                                    }
+                                }
+                                CommandOutput::HistoryAppend { path } => {
+                                    let history_items: Vec<String> = rl
+                                        .history()
+                                        .into_iter()
+                                        .map(|entry| entry.to_string())
+                                        .collect();
+
+                                    let last_idx = last_appended.get(&path).copied().unwrap_or(0);
+                                    let commands_to_append = &history_items[last_idx..];
+
+                                    if let Err(e) = HistoryCommand::append_history_file(
+                                        &path,
+                                        commands_to_append,
+                                    ) {
+                                        eprintln!("Error appending history to {}: {}", path, e);
+                                    } else {
+                                        last_appended.insert(path, history_items.len());
+                                    }
                                 }
                             }
-                        },
+                        }
                         Err(_) => {
                             if let Err(e) = execute_external_program(&command_name, &args) {
                                 eprintln!("{}", e);
