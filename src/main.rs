@@ -50,6 +50,12 @@ fn main() {
                             CommandOutput::Success => {}
                             CommandOutput::Message(msg) => println!("{}", msg),
                             CommandOutput::Exit(code) => std::process::exit(code),
+                            CommandOutput::HistoryRead(commands) => {
+                                // Add commands from file to history
+                                for cmd in commands {
+                                    rl.add_history_entry(&cmd).ok();
+                                }
+                            }
                         },
                         Err(_) => {
                             if let Err(e) = execute_external_program(&command_name, &args) {

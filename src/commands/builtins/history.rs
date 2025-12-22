@@ -1,6 +1,67 @@
 use crate::commands::{Command, CommandOutput, CommandRegistry, CommandResult};
+use std::fs;
+use std::path::Path;
 
 pub struct HistoryCommand;
+
+#[derive(Debug, PartialEq)]
+enum HistoryAction {
+    Display { limit: Option<usize> },
+    Read { path: String },
+}
+
+impl HistoryCommand {
+    fn parse_args(args: &[String]) -> Result<HistoryAction, String> {
+        if args.is_empty() {
+            return Ok(HistoryAction::Display { limit: None });
+        }
+
+        match args[0].as_str() {
+            "-r" => {
+                if args.len() < 2 {
+                    return Err("history: -r requires a file path argument".to_string());
+                }
+                Ok(HistoryAction::Read {
+                    path: args[1].clone(),
+                })
+            }
+            arg => {
+                // Try to parse as a number for limit
+                match arg.parse::<usize>() {
+                    Ok(n) => Ok(HistoryAction::Display { limit: Some(n) }),
+                    Err(_) => Err(format!("history: invalid argument: '{}'", arg)),
+                }
+            }
+        }
+    }
+
+    fn read_history_file(path: &str) -> Result<Vec<String>, String> {
+        if !Path::new(path).exists() {
+            return Err(format!(
+                "history: cannot open {}: No such file or directory",
+                path
+            ));
+        }
+
+        fs::read_to_string(path)
+            .map(|content| {
+                content
+                    .lines()
+                    .filter(|line| !line.trim().is_empty())
+                    .map(|line| line.to_string())
+                    .collect()
+            })
+            .map_err(|e| format!("history: cannot read {}: {}", path, e))
+    }
+
+    fn format_history(history: &[(usize, &String)]) -> String {
+        history
+            .iter()
+            .map(|(i, cmd)| format!("{:>5}  {}", i + 1, cmd))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+}
 
 impl Command for HistoryCommand {
     fn execute(&self, _args: &[String], _registry: &CommandRegistry) -> CommandResult {
@@ -13,37 +74,33 @@ impl Command for HistoryCommand {
         _registry: &CommandRegistry,
         history: Option<&[String]>,
     ) -> CommandResult {
-        // Parse optional limit argument
-        let limit = if args.len() >= 1 {
-            match args[0].parse::<usize>() {
-                Ok(n) => Some(n),
-                Err(_) => return Err(format!("history: invalid number of entries: '{}'", args[0])),
+        let action = Self::parse_args(args)?;
+
+        match action {
+            HistoryAction::Display { limit } => {
+                let history = history
+                    .unwrap_or(&[])
+                    .iter()
+                    .enumerate()
+                    .collect::<Vec<(usize, &String)>>();
+
+                let history = if let Some(lim) = limit {
+                    let start = history.len().saturating_sub(lim);
+                    &history[start..]
+                } else {
+                    &history
+                };
+
+                let output = Self::format_history(history);
+                Ok(CommandOutput::Message(output))
             }
-        } else {
-            None
-        };
+            HistoryAction::Read { path } => {
+                let file_commands = Self::read_history_file(&path)?;
 
-        let history = history
-            .unwrap_or(&[])
-            .iter()
-            .enumerate()
-            .collect::<Vec<(usize, &String)>>();
-
-        // Apply limit if provided (the last 'limit' entries)
-        let history = if let Some(lim) = limit {
-            let start = history.len().saturating_sub(lim);
-            &history[start..]
-        } else {
-            &history
-        };
-
-        let output = history
-            .iter()
-            .map(|(i, cmd)| format!("{:>5}  {}", i + 1, cmd))
-            .collect::<Vec<_>>()
-            .join("\n");
-
-        Ok(CommandOutput::Message(output))
+                // Return a special variant that signals file commands should be added
+                Ok(CommandOutput::HistoryRead(file_commands))
+            }
+        }
     }
 
     fn name(&self) -> &str {
@@ -51,26 +108,91 @@ impl Command for HistoryCommand {
     }
 
     fn description(&self) -> &str {
-        "Lists previously executed commands"
+        "Lists previously executed commands or reads from a history file"
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_parse_args_no_args() {
+        let result = HistoryCommand::parse_args(&[]);
+        assert!(result.is_ok());
+
+        let result = result.unwrap();
+        assert_eq!(result, HistoryAction::Display { limit: None });
+    }
+
+    #[test]
+    fn test_parse_args_limit() {
+        let result = HistoryCommand::parse_args(&["5".to_string()]);
+        assert!(result.is_ok());
+
+        let result = result.unwrap();
+        assert_eq!(result, HistoryAction::Display { limit: Some(5) });
+    }
+
+    #[test]
+    fn test_parse_args_read() {
+        let result = HistoryCommand::parse_args(&["-r".to_string(), "/path/to/file".to_string()]);
+        assert!(result.is_ok());
+
+        let result = result.unwrap();
+        assert_eq!(
+            result,
+            HistoryAction::Read {
+                path: "/path/to/file".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_args_read_missing_path() {
+        let result = HistoryCommand::parse_args(&["-r".to_string()]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_args_invalid() {
+        let result = HistoryCommand::parse_args(&["invalid".to_string()]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_read_history_file() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "echo hello").unwrap();
+        writeln!(temp_file, "echo world").unwrap();
+        writeln!(temp_file).unwrap(); // Empty line
+        writeln!(temp_file, "ls -la").unwrap();
+        temp_file.flush().unwrap();
+
+        let path = temp_file.path().to_str().unwrap();
+        let result = HistoryCommand::read_history_file(path).unwrap();
+
+        assert_eq!(result, vec!["echo hello", "echo world", "ls -la"]);
+    }
+
+    #[test]
+    fn test_read_history_file_not_found() {
+        let result = HistoryCommand::read_history_file("/nonexistent/file");
+        assert!(result.is_err());
+    }
 
     #[test]
     fn test_history_without_limit() {
         let command = HistoryCommand;
         let registry = CommandRegistry::new();
-
         let history = vec![
             "ls -la".to_string(),
             "cd /home".to_string(),
             "echo Hello".to_string(),
         ];
 
-        // Test without limit
         let result = command
             .execute_with_history(&[], &registry, Some(&history))
             .unwrap();
@@ -92,7 +214,6 @@ mod tests {
             "echo Hello".to_string(),
         ];
 
-        // Test with limit of 2
         let result = command
             .execute_with_history(&["2".to_string()], &registry, Some(&history))
             .unwrap();

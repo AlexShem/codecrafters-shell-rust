@@ -15,6 +15,8 @@ pub enum CommandOutput {
     Message(String),
     /// Exit the shell with given code
     Exit(i32),
+    /// History commands read from file (should be added to history)
+    HistoryRead(Vec<String>),
 }
 
 /// Trait that all commands must implement
