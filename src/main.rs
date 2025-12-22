@@ -9,6 +9,7 @@ use rustyline::error::ReadlineError;
 use rustyline::Config;
 use std::io::{self};
 use std::process::Command as ProcessCommand;
+use rustyline::config::Configurer;
 
 fn main() {
     // Create command registry with all available commands
@@ -24,11 +25,14 @@ fn main() {
     // Load PATH executables
     helper.load_path_executables();
 
-    let config = Config::builder().auto_add_history(true).build();
+    let config = Config::builder()
+        .auto_add_history(true)
+        .build();
     let history = rustyline::history::MemHistory::new();
 
     let mut rl = rustyline::Editor::<ShellHelper, _>::with_history(config, history).unwrap();
     rl.set_helper(Some(helper));
+    rl.set_history_ignore_dups(false).unwrap();
 
     loop {
         match rl.readline("$ ") {

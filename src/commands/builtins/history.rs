@@ -289,4 +289,25 @@ mod tests {
             panic!("Expected CommandOutput::Message");
         }
     }
+
+    #[test]
+    fn test_history_with_repeated_commands() {
+        let command = HistoryCommand;
+        let registry = CommandRegistry::new();
+        let history = vec![
+            "echo Hello".to_string(),
+            "echo Hello".to_string(),
+            "ls -la".to_string(),
+        ];
+
+        let result = command
+            .execute_with_history(&[], &registry, Some(&history))
+            .unwrap();
+        if let CommandOutput::Message(output) = result {
+            let expected = "    1  echo Hello\n    2  echo Hello\n    3  ls -la";
+            assert_eq!(output, expected);
+        } else {
+            panic!("Expected CommandOutput::Message");
+        }
+    }
 }
