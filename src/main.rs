@@ -34,6 +34,19 @@ fn main() {
     rl.set_helper(Some(helper));
     rl.set_history_ignore_dups(false).unwrap();
 
+    // Load HISTFILE environment variable (if provided)
+    if let Ok(histfile_path) = std::env::var("HISTFILE") {
+        if std::path::Path::new(&histfile_path).exists() {
+            if let Ok(content) = std::fs::read_to_string(&histfile_path) {
+                for line in content.lines() {
+                    if !line.trim().is_empty() {
+                        rl.add_history_entry(line).ok();
+                    }
+                }
+            }
+        }
+    }
+
     // Track last appended index per file
     let mut last_appended: HashMap<String, usize> = HashMap::new();
 
