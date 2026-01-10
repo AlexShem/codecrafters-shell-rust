@@ -34,10 +34,11 @@ fn main() {
     rl.set_helper(Some(helper));
     rl.set_history_ignore_dups(false).unwrap();
 
-    // Load HISTFILE environment variable (if provided)
-    if let Ok(histfile_path) = std::env::var("HISTFILE") {
-        if std::path::Path::new(&histfile_path).exists() {
-            if let Ok(content) = std::fs::read_to_string(&histfile_path) {
+    // Load HISTFILE environment variable (if provided) and store it for saving on exit
+    let histfile_path = std::env::var("HISTFILE").ok();
+    if let Some(ref path) = histfile_path {
+        if std::path::Path::new(path).exists() {
+            if let Ok(content) = std::fs::read_to_string(path) {
                 for line in content.lines() {
                     if !line.trim().is_empty() {
                         rl.add_history_entry(line).ok();
@@ -70,7 +71,15 @@ fn main() {
                             match output {
                                 CommandOutput::Success => {}
                                 CommandOutput::Message(msg) => println!("{}", msg),
-                                CommandOutput::Exit(code) => std::process::exit(code),
+                                CommandOutput::Exit(code) => {
+                                    // Save history to HISTFILE before exiting
+                                    if let Some(ref path) = histfile_path {
+                                        if let Err(e) = save_history_to_file(&rl, path) {
+                                            eprintln!("Error saving history: {}", e);
+                                        }
+                                    }
+                                    std::process::exit(code);
+                                }
                                 CommandOutput::HistoryRead(commands) => {
                                     // Add commands from file to history
                                     for cmd in commands {
@@ -107,13 +116,34 @@ fn main() {
                 }
             }
             Err(ReadlineError::Interrupted) => continue,
-            Err(ReadlineError::Eof) => break,
+            Err(ReadlineError::Eof) => {
+                // Save history to HISTFILE before exiting
+                if let Some(ref path) = histfile_path {
+                    if let Err(e) = save_history_to_file(&rl, path) {
+                        eprintln!("Error saving history: {}", e);
+                    }
+                }
+                break;
+            }
             Err(err) => {
                 eprintln!("Error: {:?}", err);
                 break;
             }
         }
     }
+}
+
+fn save_history_to_file(
+    rl: &rustyline::Editor<ShellHelper, rustyline::history::MemHistory>,
+    histfile_path: &str,
+) -> Result<(), String> {
+    let history_items: Vec<String> = rl
+        .history()
+        .into_iter()
+        .map(|entry| entry.to_string())
+        .collect();
+
+    HistoryCommand::write_history_file(histfile_path, &history_items)
 }
 
 fn execute_external_program(program: &str, args: &[String]) -> Result<(), String> {

@@ -73,7 +73,7 @@ impl HistoryCommand {
             .map_err(|e| format!("history: cannot read {}: {}", path, e))
     }
 
-    fn write_history_file(path: &str, commands: &[String]) -> Result<(), String> {
+    pub fn write_history_file(path: &str, commands: &[String]) -> Result<(), String> {
         let mut file = fs::File::create(path)
             .map_err(|e| format!("history: cannot open {} for writing: {}", path, e))?;
         for cmd in commands {
