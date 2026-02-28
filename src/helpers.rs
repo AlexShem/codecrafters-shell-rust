@@ -1,3 +1,4 @@
+use crate::file_utils::find_matching_files;
 use crate::path_utils::scan_path_executables;
 use crate::trie::Trie;
 use rustyline::completion::{Completer, Pair};
@@ -78,18 +79,52 @@ impl Completer for ShellHelper {
         _ctx: &Context<'_>,
     ) -> rustyline::Result<(usize, Vec<Self::Candidate>)> {
         let line = &line[..pos];
-        let word = line.split_whitespace().last().unwrap_or("");
 
-        let mut completions = self.trie.find_completions(word);
+        // Check if we're completing a file argument (after the first space)
+        let has_space = line.contains(' ');
+
+        if has_space {
+            // File completion mode
+            return self.complete_files(line);
+        }
+
+        // Command completion mode
+        self.complete_commands(line)
+    }
+}
+
+impl ShellHelper {
+    /// Complete file arguments (triggered when input contains spaces)
+    fn complete_files(&self, line: &str) -> rustyline::Result<(usize, Vec<Pair>)> {
+        let word = line.split_whitespace().last().unwrap_or("");
+        self.complete_with(line, word, find_matching_files(word))
+    }
+
+    /// Complete command names (triggered when input has no spaces yet)
+    fn complete_commands(&self, line: &str) -> rustyline::Result<(usize, Vec<Pair>)> {
+        let word = line.split_whitespace().last().unwrap_or("");
+        self.complete_with(line, word, self.trie.find_completions(word))
+    }
+
+    /// Core completion logic shared by file and command completion.
+    ///
+    /// `line`        – the full input up to the cursor
+    /// `word`        – the prefix being completed (last whitespace-delimited token)
+    /// `completions` – candidate strings that already match `word`
+    fn complete_with(
+        &self,
+        line: &str,
+        word: &str,
+        mut completions: Vec<String>,
+    ) -> rustyline::Result<(usize, Vec<Pair>)> {
         completions.sort();
 
-        // Handle multiple completions
         if completions.len() > 1 {
             let common_prefix = Self::longest_common_prefix(&completions);
 
+            // Extend to the longest common prefix without ambiguity
             if common_prefix.len() > word.len() {
                 self.last_completion_context.borrow_mut().take();
-
                 return Ok((
                     line.len() - word.len(),
                     vec![Pair {
@@ -100,46 +135,36 @@ impl Completer for ShellHelper {
             }
 
             let mut last_context = self.last_completion_context.borrow_mut();
-
-            // Check if this is a repeated TAB press for the same prefix
             let is_repeated = last_context
                 .as_ref()
                 .map(|(prev_word, _)| prev_word == word)
                 .unwrap_or(false);
 
             return if is_repeated {
-                // Second TAB press - show all completions
+                // Second TAB press – print all candidates and redraw prompt
                 println!();
                 println!("{}  ", completions.join("  "));
                 print!("$ {}", line);
                 std::io::Write::flush(&mut std::io::stdout()).ok();
-
                 *last_context = None;
-
-                // Return empty to prevent rustyline from doing anything
                 Ok((0, vec![]))
             } else {
-                // First TAB press - ring bell and store context
+                // First TAB press – ring bell and remember context
                 print!("\x07");
                 std::io::Write::flush(&mut std::io::stdout()).ok();
-
-                *last_context = Some((word.to_string(), completions.clone()));
-
+                *last_context = Some((word.to_string(), completions));
                 Ok((0, vec![]))
             };
         }
 
-        // Single completion or no completions - proceed normally
+        // Zero or one match – complete directly (trailing space lets the user
+        // continue typing the next argument immediately)
         self.last_completion_context.borrow_mut().take();
-
         let candidates = completions
             .into_iter()
-            .map(|completion| {
-                let replacement = format!("{} ", completion);
-                Pair {
-                    display: completion,
-                    replacement,
-                }
+            .map(|c| Pair {
+                replacement: format!("{} ", c),
+                display: c,
             })
             .collect();
 

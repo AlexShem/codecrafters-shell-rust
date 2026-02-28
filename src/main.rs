@@ -1,6 +1,7 @@
 mod commands;
 mod helpers;
 mod path_utils;
+mod file_utils;
 mod trie;
 mod parser;
 
