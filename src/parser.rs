@@ -27,10 +27,31 @@ pub fn parse_command_line(input: &str) -> anyhow::Result<Vec<String>> {
                         chars.next();
                         break;
                     }
-                    current_arg.push(inner_ch);
-                    chars.next();
+                    // Backslash inside double quotes should escape the next character
+                    if inner_ch == '\\' {
+                        chars.next();
+                        if let Some(&escaped_ch) = chars.peek() {
+                            // Only certain characters are escaped inside double quotes
+                            if escaped_ch == '"' || escaped_ch == '\\' {
+                                current_arg.push(escaped_ch);
+                                chars.next();
+                            } else {
+                                // If it's not a special character, keep the backslash
+                                current_arg.push('\\');
+                                current_arg.push(escaped_ch);
+                                chars.next();
+                            }
+                        } else {
+                            // If backslash is at the end of the input, treat it as a literal
+                            current_arg.push('\\');
+                        }
+                    } else {
+                        current_arg.push(inner_ch);
+                        chars.next();
+                    }
                 }
             }
+            // Backslash outside of quotes should escape the next character
             '\\' => {
                 // Consume the backslash
                 chars.next();
@@ -235,5 +256,46 @@ mod tests {
         assert!(result.is_ok());
         let result = result.unwrap();
         assert_eq!(result, vec!["echo", "'hello'"]);
+    }
+
+    // Tests for backslash behavior within double quotes
+    #[test]
+    fn test_backslash_escapes_double_quote() {
+        let result = parse_command_line("echo \"A \\\" inside double quotes\"");
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert_eq!(result, vec!["echo", "A \" inside double quotes"]);
+    }
+
+    #[test]
+    fn test_backslash_escapes_itself_in_double_quotes() {
+        let result = parse_command_line("echo \"A \\\\ escapes itself\"");
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert_eq!(result, vec!["echo", "A \\ escapes itself"]);
+    }
+
+    #[test]
+    fn test_backslash_literal_before_non_special_char_in_double_quotes() {
+        let result = parse_command_line("echo \"just'one'\\n'backslash\"");
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert_eq!(result, vec!["echo", "just'one'\\n'backslash"]);
+    }
+
+    #[test]
+    fn test_multiple_escaped_quotes_in_double_quotes() {
+        let result = parse_command_line("echo \"inside\\\"literal_quote.outside\\\"\"");
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert_eq!(result, vec!["echo", "inside\"literal_quote.outside\""]);
+    }
+
+    #[test]
+    fn test_mixed_escaped_backslash_and_quotes_in_double_quotes() {
+        let result = parse_command_line("echo \"test\\\\and\\\"quote\"");
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert_eq!(result, vec!["echo", "test\\and\"quote"]);
     }
 }
