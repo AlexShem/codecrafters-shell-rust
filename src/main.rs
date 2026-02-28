@@ -2,16 +2,18 @@ mod commands;
 mod helpers;
 mod path_utils;
 mod trie;
+mod parser;
 
 use crate::commands::builtins::history::HistoryCommand;
 use crate::helpers::ShellHelper;
-use commands::{parse_command_line, CommandOutput, CommandRegistry};
+use commands::{CommandOutput, CommandRegistry};
 use rustyline::config::Configurer;
 use rustyline::error::ReadlineError;
 use rustyline::Config;
 use std::collections::HashMap;
 use std::io::{self};
 use std::process::Command as ProcessCommand;
+use crate::parser::parse_command_line;
 
 fn main() {
     // Create command registry with all available commands
@@ -54,7 +56,9 @@ fn main() {
     loop {
         match rl.readline("$ ") {
             Ok(input) => {
-                if let Some((command_name, args)) = parse_command_line(&input) {
+                if let Ok(command_line) = parse_command_line(&input) {
+                    let command_name = &command_line[0];
+                    let args = &command_line[1..];
                     let result = if command_name == "history" {
                         let history_items: Vec<String> = rl
                             .history()

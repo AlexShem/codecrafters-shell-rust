@@ -113,21 +113,3 @@ impl CommandRegistry {
         self.commands.keys().map(|s| s.as_str()).collect()
     }
 }
-
-/// Parse a command line into command name and arguments
-pub fn parse_command_line(input: &str) -> Option<(String, Vec<String>)> {
-    let parts: Vec<String> = input
-        .trim()
-        .split_whitespace()
-        .map(|s| s.to_string())
-        .collect();
-
-    if parts.is_empty() {
-        return None;
-    }
-
-    let command = parts[0].clone();
-    let args = parts[1..].to_vec();
-
-    Some((command, args))
-}
