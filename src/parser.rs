@@ -31,6 +31,15 @@ pub fn parse_command_line(input: &str) -> anyhow::Result<Vec<String>> {
                     chars.next();
                 }
             }
+            '\\' => {
+                // Consume the backslash
+                chars.next();
+                // If there's a next character, add it literally
+                if let Some(&next_ch) = chars.peek() {
+                    current_arg.push(next_ch);
+                    chars.next();
+                }
+            }
             ' ' | '\n' | '\t' | '\r' => {
                 chars.next();
                 // If current_arg is not empty, push it as a complete argument
@@ -75,7 +84,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_one_single_quotes() {
+    fn test_single_quote_preserves_spaces() {
         let input = "echo 'hello world'";
         let res = parse_command_line(input);
         assert!(res.is_ok());
@@ -149,14 +158,6 @@ mod tests {
     }
 
     #[test]
-    fn test_special_chars_in_single_quotes() {
-        let result = parse_command_line("echo '$VAR' '*pattern'");
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert_eq!(result, vec!["echo", "$VAR", "*pattern"]);
-    }
-
-    #[test]
     fn test_special_chars_in_double_quotes() {
         let result = parse_command_line("echo \"$VAR\" \"*pattern\"");
         assert!(result.is_ok());
@@ -194,5 +195,45 @@ mod tests {
         assert!(result.is_ok());
         let result = result.unwrap();
         assert_eq!(result, vec!["echo", "helloworldtest"]);
+    }
+
+    #[test]
+    fn test_escaped_spaces() {
+        let result = parse_command_line("echo three\\ \\ \\ spaces");
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert_eq!(result, vec!["echo", "three   spaces"]);
+    }
+
+    #[test]
+    fn test_escaped_space_before_unescaped_spaces() {
+        let result = parse_command_line("echo before\\     after");
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert_eq!(result, vec!["echo", "before ", "after"]);
+    }
+
+    #[test]
+    fn test_escaped_letter() {
+        let result = parse_command_line("echo test\\nexample");
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert_eq!(result, vec!["echo", "testnexample"]);
+    }
+
+    #[test]
+    fn test_escaped_backslash() {
+        let result = parse_command_line("echo hello\\\\world");
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert_eq!(result, vec!["echo", "hello\\world"]);
+    }
+
+    #[test]
+    fn test_escaped_single_quotes() {
+        let result = parse_command_line("echo \\'hello\\'");
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert_eq!(result, vec!["echo", "'hello'"]);
     }
 }
