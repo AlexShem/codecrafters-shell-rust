@@ -19,6 +19,18 @@ pub fn parse_command_line(input: &str) -> anyhow::Result<Vec<String>> {
                     chars.next();
                 }
             }
+            '"' => {
+                // Consume the opening double quote
+                chars.next();
+                while let Some(&inner_ch) = chars.peek() {
+                    if inner_ch == '"' {
+                        chars.next();
+                        break;
+                    }
+                    current_arg.push(inner_ch);
+                    chars.next();
+                }
+            }
             ' ' | '\n' | '\t' | '\r' => {
                 chars.next();
                 // If current_arg is not empty, push it as a complete argument
@@ -126,5 +138,61 @@ mod tests {
         assert!(result.is_ok());
         let result = result.unwrap();
         assert_eq!(result, vec!["echo", "$VAR", "*pattern"]);
+    }
+
+    #[test]
+    fn test_empty_double_quotes_ignored() {
+        let result = parse_command_line("echo hello\"\"world");
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert_eq!(result, vec!["echo", "helloworld"]);
+    }
+
+    #[test]
+    fn test_special_chars_in_single_quotes() {
+        let result = parse_command_line("echo '$VAR' '*pattern'");
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert_eq!(result, vec!["echo", "$VAR", "*pattern"]);
+    }
+
+    #[test]
+    fn test_special_chars_in_double_quotes() {
+        let result = parse_command_line("echo \"$VAR\" \"*pattern\"");
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert_eq!(result, vec!["echo", "$VAR", "*pattern"]);
+    }
+
+    #[test]
+    fn test_single_quotes_inside_double_quotes() {
+        let result = parse_command_line("echo \"shell's test\"");
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert_eq!(result, vec!["echo", "shell's test"]);
+    }
+
+    #[test]
+    fn test_separate_double_quoted_arguments() {
+        let result = parse_command_line("echo \"hello\" \"world\"");
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert_eq!(result, vec!["echo", "hello", "world"]);
+    }
+
+    #[test]
+    fn test_mixed_single_and_double_quotes() {
+        let result = parse_command_line("echo 'single' \"double\" unquoted");
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert_eq!(result, vec!["echo", "single", "double", "unquoted"]);
+    }
+
+    #[test]
+    fn test_concatenation_mixed_quotes() {
+        let result = parse_command_line("echo 'hello'\"world\"'test'");
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert_eq!(result, vec!["echo", "helloworldtest"]);
     }
 }
